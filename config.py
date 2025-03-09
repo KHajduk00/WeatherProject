@@ -13,7 +13,7 @@ AIR_POLLUTION_API_URL = "https://api.openweathermap.org/data/2.5/air_pollution"
 OUTPUT_CSV_PATH = "cities_weather_data.csv"
 
 # Units
-TEMP_UNIT = "metric"  # Use Celsius for temperature
+TEMP_UNIT = "Celsius"  # Use Celsius for temperature
 
 # Collection interval (in seconds)
 # 3600 = 1 hour, 1800 = 30 minutes, etc.
