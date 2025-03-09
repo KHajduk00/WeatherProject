@@ -1,0 +1,23 @@
+# List of cities with their coordinates
+CITIES = [
+    {"name": "Amsterdam", "country": "Netherlands", "lat": 52.3676, "lon": 4.9041},
+    {"name": "Athens", "country": "Greece", "lat": 37.9838, "lon": 23.7275},
+    {"name": "Berlin", "country": "Germany", "lat": 52.5200, "lon": 13.4050},
+    {"name": "Bern", "country": "Switzerland", "lat": 46.9480, "lon": 7.4474},
+    {"name": "Bratislava", "country": "Slovakia", "lat": 48.1486, "lon": 17.1077},
+    {"name": "Brussels", "country": "Belgium", "lat": 50.8503, "lon": 4.3517},
+    {"name": "Bucharest", "country": "Romania", "lat": 44.4268, "lon": 26.1025},
+    {"name": "Budapest", "country": "Hungary", "lat": 47.4979, "lon": 19.0402},
+    {"name": "Copenhagen", "country": "Denmark", "lat": 55.6761, "lon": 12.5683},
+    {"name": "Dublin", "country": "Ireland", "lat": 53.3498, "lon": -6.2603},
+    {"name": "Helsinki", "country": "Finland", "lat": 60.1699, "lon": 24.9384},
+    {"name": "Kyiv", "country": "Ukraine", "lat": 50.4501, "lon": 30.5234},
+    {"name": "Lisbon", "country": "Portugal", "lat": 38.7223, "lon": -9.1393},
+    {"name": "Ljubljana", "country": "Slovenia", "lat": 46.0569, "lon": 14.5058},
+    {"name": "London", "country": "United Kingdom", "lat": 51.5074, "lon": -0.1278},
+    {"name": "Luxembourg City", "country": "Luxembourg", "lat": 49.6116, "lon": 6.1319},
+    {"name": "Madrid", "country": "Spain", "lat": 40.4168, "lon": -3.7038},
+    {"name": "Oslo", "country": "Norway", "lat": 59.9139, "lon": 10.7522},
+    {"name": "Paris", "country": "France", "lat": 48.8566, "lon": 2.3522},
+    {"name": "Prague", "country": "Czech Republic", "lat": 50.0755, "lon": 14.4378},
+]
