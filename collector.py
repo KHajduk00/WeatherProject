@@ -6,6 +6,7 @@ import logging
 from datetime import datetime
 import signal
 import sys
+from database import get_db
 
 # Import configuration and cities
 from config import (
@@ -138,39 +139,76 @@ def extract_air_pollution_data(air_data):
     }
 
 def save_data(city_info, current_weather, air_data):
-    """Process and save weather and air pollution data to CSV"""
+    """Process and save weather and air pollution data to SQLite database"""
     collection_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     
-    # Extract data
-    weather_dict = extract_current_weather(current_weather, city_info)
-    air_dict = extract_air_pollution_data(air_data)
-    
-    # Combine all data
-    combined_data = {
-        'collection_timestamp': collection_timestamp,
-        **weather_dict,
-        **air_dict
-    }
-    
-    # Create DataFrame from the combined data
-    df_new = pd.DataFrame([combined_data])
-    
-    # Check if the output file exists
-    if os.path.exists(OUTPUT_CSV_PATH):
-        try:
-            # Load existing CSV and append new data
-            df_existing = pd.read_csv(OUTPUT_CSV_PATH)
-            df_combined = pd.concat([df_existing, df_new], ignore_index=True)
-            df_combined.to_csv(OUTPUT_CSV_PATH, index=False)
-            logger.info(f"Data for {city_info['name']} appended to {OUTPUT_CSV_PATH}")
-        except Exception as e:
-            logger.error(f"Error appending to CSV: {e}")
-            # Save just the new data if there's an error with the existing file
-            df_new.to_csv(OUTPUT_CSV_PATH, index=False)
-    else:
-        # Create new CSV file
-        df_new.to_csv(OUTPUT_CSV_PATH, index=False)
-        logger.info(f"Created new CSV file {OUTPUT_CSV_PATH} with data for {city_info['name']}")
+    try:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            
+            # Get city_id
+            cursor.execute(
+                "SELECT city_id FROM cities WHERE name = ? AND country = ?",
+                (city_info['name'], city_info['country'])
+            )
+            result = cursor.fetchone()
+            
+            if not result:
+                logger.error(f"City not found in database: {city_info['name']}, {city_info['country']}")
+                return
+                
+            city_id = result[0]
+            
+            # Extract weather data
+            weather_dict = extract_current_weather(current_weather, city_info)
+            if weather_dict:
+                try:
+                    cursor.execute("""
+                        INSERT INTO weather_measurements (
+                            city_id, measurement_timestamp, collection_timestamp,
+                            temperature, feels_like, temp_min, temp_max, pressure,
+                            humidity, sea_level, ground_level, visibility, wind_speed,
+                            wind_degree, wind_gust, clouds_all, rain_1h, rain_3h,
+                            snow_1h, snow_3h, weather_condition_id, weather_main,
+                            weather_description, weather_icon, sunrise, sunset
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        city_id, weather_dict['measurement_timestamp'], collection_timestamp,
+                        weather_dict['temp'], weather_dict['feels_like'], weather_dict['temp_min'],
+                        weather_dict['temp_max'], weather_dict['pressure'], weather_dict['humidity'],
+                        weather_dict['sea_level'], weather_dict['grnd_level'], weather_dict['visibility'],
+                        weather_dict['wind_speed'], weather_dict['wind_deg'], weather_dict['wind_gust'],
+                        weather_dict['clouds_all'], weather_dict['rain_1h'], weather_dict['rain_3h'],
+                        weather_dict['snow_1h'], weather_dict['snow_3h'], weather_dict['weather_id'],
+                        weather_dict['weather_main'], weather_dict['weather_description'],
+                        weather_dict['weather_icon'], weather_dict['sunrise'], weather_dict['sunset']
+                    ))
+                except sqlite3.Error as e:
+                    logger.error(f"Error saving weather data: {e}")
+            
+            # Extract and save air pollution data
+            air_dict = extract_air_pollution_data(air_data)
+            if air_dict:
+                try:
+                    cursor.execute("""
+                        INSERT INTO air_pollution_measurements (
+                            city_id, measurement_timestamp, collection_timestamp,
+                            aqi, co, no, no2, o3, so2, pm2_5, pm10, nh3
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        city_id, weather_dict['measurement_timestamp'], collection_timestamp,
+                        air_dict['aqi'], air_dict['co'], air_dict['no'], air_dict['no2'],
+                        air_dict['o3'], air_dict['so2'], air_dict['pm2_5'], air_dict['pm10'],
+                        air_dict['nh3']
+                    ))
+                except sqlite3.Error as e:
+                    logger.error(f"Error saving air pollution data: {e}")
+            
+            conn.commit()
+            logger.info(f"Data for {city_info['name']} saved to database")
+            
+    except Exception as e:
+        logger.error(f"Error in save_data for {city_info['name']}: {e}")
 
 def collect_data_for_city(city_info):
     """Collect weather and air pollution data for a single city"""
