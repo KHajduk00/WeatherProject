@@ -10,7 +10,7 @@ A full-stack application for collecting and displaying weather data and air qual
 - OpenWeather API key (Get it here: https://openweathermap.org/api)
 
 ## Project Structure
-
+```
 weather-app/
 ├── backend/           # FastAPI backend
 │   ├── app/
@@ -25,7 +25,7 @@ weather-app/
     ├── src/
     ├── public/
     └── package.json
-
+```
 ## Installation
 
 ### 1. Clone the Repository
