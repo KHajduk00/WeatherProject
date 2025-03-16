@@ -4,6 +4,7 @@
 #data & log
 cities_weather_data.csv
 weather_collector.log
+weather_data.db
 
 #others
 .venv
