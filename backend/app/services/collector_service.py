@@ -1,6 +1,7 @@
 import threading
 import time
 import logging
+from datetime import datetime 
 from app.core.config import COLLECTION_INTERVAL
 from app.services.collector import collect_data_for_all_cities
 

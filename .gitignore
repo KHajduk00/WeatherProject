@@ -1,5 +1,7 @@
 #environment
-.env
+.env*
+.env.production
+.env.development
 
 #data & log
 cities_weather_data.csv
