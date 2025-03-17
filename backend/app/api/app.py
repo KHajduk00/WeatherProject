@@ -8,6 +8,7 @@ import logging
 from app.models.models import WeatherData, AirPollutionData, CityStats, WeatherQueryParams
 from app.services.collector_service import CollectorService
 from app.database.database import get_db
+from app.core.config import ALLOWED_ORIGINS
 
 # Configure logging
 logging.basicConfig(
@@ -26,7 +27,7 @@ app = FastAPI(
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

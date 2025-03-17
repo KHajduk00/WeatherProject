@@ -1,4 +1,6 @@
-const API_BASE_URL = 'http://localhost:8000/api/v1'
+import { currentConfig } from '../config/config'
+
+const API_BASE_URL = currentConfig.API_BASE_URL
 
 export const weatherApi = {
   async getWeatherData(params = {}) {
