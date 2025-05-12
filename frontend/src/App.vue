@@ -1,10 +1,10 @@
 <template>
   <div class="app">
     <nav class="nav">
-      <router-link to="/">Home</router-link> |
-      <router-link to="/weather">Weather</router-link> |
-      <router-link to="/air-quality">Air Quality</router-link> |
-      <router-link to="/stats">Statistics</router-link>
+      <router-link to="/" class="nav-link">Home</router-link>
+      <router-link to="/weather" class="nav-link">Weather</router-link>
+      <router-link to="/air-quality" class="nav-link">Air Quality</router-link>
+      <router-link to="/stats" class="nav-link">Statistics</router-link>
     </nav>
     
     <main class="main">
@@ -16,27 +16,40 @@
 <style>
 .app {
   min-height: 100vh;
-  padding: 20px;
+  background-color: var(--background-color);
+  color: var(--text-color);
 }
 
 .nav {
+  background-color: white;
   padding: 20px;
   text-align: center;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-bottom: 20px;
 }
 
-.nav a {
-  color: #2c3e50;
+.nav-link {
+  color: var(--secondary-color);
   text-decoration: none;
-  margin: 0 10px;
+  margin: 0 15px;
+  padding: 5px 10px;
+  font-weight: bold;
+  border-radius: 4px;
+  transition: all 0.3s ease;
 }
 
-.nav a.router-link-active {
-  color: #42b983;
+.nav-link:hover {
+  color: var(--primary-color);
+}
+
+.router-link-active {
+  color: var(--primary-color);
+  background-color: rgba(66, 185, 131, 0.1);
 }
 
 .main {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 20px;
+  padding: 0 20px 40px;
 }
 </style>
