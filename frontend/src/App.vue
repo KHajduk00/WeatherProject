@@ -4,6 +4,7 @@
       <router-link to="/" class="nav-link">Home</router-link>
       <router-link to="/weather" class="nav-link">Weather</router-link>
       <router-link to="/air-quality" class="nav-link">Air Quality</router-link>
+      <router-link to="/charts" class="nav-link">Charts</router-link>
       <router-link to="/stats" class="nav-link">Statistics</router-link>
     </nav>
     
