@@ -4,20 +4,19 @@
     
     <div class="chart-controls">
       <select v-model="selectedChart" class="chart-selector">
-        <option value="temperature">Temperature Trends</option>
-        <option value="humidity">Humidity Analysis</option>
-        <option value="wind">Wind Speed</option>
-        <option value="comparison">City Comparison</option>
-      </select>
-      
-      <select v-model="timeRange" class="time-selector">
-        <option value="24h">Last 24 Hours</option>
-        <option value="7d">Last 7 Days</option>
-        <option value="30d">Last 30 Days</option>
+        <option value="temperature">Q1.Smart Alert Triggering</option>
+        <option value="humidity">Q2.Weather-Pollution Link </option>
+        <option value="wind">Q3.AQI Forecasting Model</option>
+   
       </select>
     </div>
 
     <div class="charts-container">
+      <!-- Question text that changes based on selection -->
+      <div class="question-text">
+        <h2>{{ getQuestionText() }}</h2>
+      </div>
+    
       <div v-if="!loading" class="chart-grid">
         <!-- Placeholder for your charts -->
         <div class="chart-placeholder">
@@ -49,12 +48,21 @@ const chartData = ref([])
 
 function getChartTitle() {
   const titles = {
-    temperature: 'Temperature Trends',
+    temperature: 'Weather-Driven Alerts',
     humidity: 'Humidity Analysis',
     wind: 'Wind Speed Analysis',
     comparison: 'City Comparison'
   }
   return titles[selectedChart.value] || 'Chart'
+}
+
+function getQuestionText() {
+  const questions = {
+    temperature: 'How can real-time weather and air quality data from OpenWeather be used to trigger smart alerts or health advisories in cities experiencing high pollution under specific weather conditions?',
+    humidity: 'What weather conditions (e.g., high humidity and low wind) are most associated with elevated PM2.5 or NO₂ levels, and how can this information support dynamic environmental regulations?',
+    wind: 'Can patterns in weather and pollution data from OpenWeather be used to build a simple predictive model to forecast AQI levels 12–24 hours ahead?'
+  }
+  return questions[selectedChart.value] || 'Select a question'
 }
 
 async function loadChartData() {
@@ -97,6 +105,22 @@ onMounted(() => {
 
 .charts-container {
   min-height: 400px;
+}
+
+.question-text {
+  text-align: center;
+  margin-bottom: 30px;
+  padding: 20px;
+  background: var(--card-background, #f8f9fa);
+  border-radius: var(--border-radius, 8px);
+  border: 2px solid var(--primary-color, #42b983);
+}
+
+.question-text h2 {
+  margin: 0;
+  color: var(--primary-color, #42b983);
+  font-size: 24px;
+  font-weight: 600;
 }
 
 .chart-grid {
