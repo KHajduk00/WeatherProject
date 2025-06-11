@@ -227,6 +227,209 @@ async def get_statistics(
         logger.error(f"Database error: {e}")
         raise HTTPException(status_code=500, detail="Database error")
 
+@app.get("/api/v1/analytics/weather-pollution-correlation")
+async def get_weather_pollution_correlation(
+    city: Optional[str] = None,
+    days: Optional[int] = Query(default=30, ge=7, le=90)
+):
+    """
+    Get weather and pollution data correlation for analysis
+    """
+    try:
+        start_date = (datetime.now() - timedelta(days=days)).isoformat()
+
+        query = """
+            SELECT
+                c.name as city,
+                w.measurement_timestamp,
+                w.temperature,
+                w.humidity,
+                w.pressure,
+                w.wind_speed,
+                w.weather_description,
+                a.aqi,
+                a.pm2_5,
+                a.pm10,
+                a.no2,
+                a.o3,
+                a.co
+            FROM weather_measurements w
+            JOIN cities c ON w.city_id = c.city_id
+            JOIN air_pollution_measurements a ON w.city_id = a.city_id
+                AND datetime(w.measurement_timestamp) = datetime(a.measurement_timestamp)
+            WHERE w.measurement_timestamp >= ?
+        """
+        params = [start_date]
+
+        if city:
+            query += " AND c.name = ?"
+            params.append(city)
+
+        query += " ORDER BY w.measurement_timestamp DESC"
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+            return [
+                {
+                    "city": row[0],
+                    "timestamp": row[1],
+                    "temperature": row[2],
+                    "humidity": row[3],
+                    "pressure": row[4],
+                    "wind_speed": row[5],
+                    "weather_description": row[6],
+                    "aqi": row[7],
+                    "pm2_5": row[8],
+                    "pm10": row[9],
+                    "no2": row[10],
+                    "o3": row[11],
+                    "co": row[12]
+                }
+                for row in results
+            ]
+
+    except sqlite3.Error as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+
+@app.get("/api/v1/analytics/high-pollution-alerts")
+async def get_high_pollution_alerts(
+    aqi_threshold: Optional[int] = Query(default=100, ge=50, le=300),
+    pm25_threshold: Optional[float] = Query(default=35.0, ge=10.0, le=100.0),
+    days: Optional[int] = Query(default=30, ge=7, le=90)
+):
+    """
+    Get high pollution events with associated weather conditions for alert analysis
+    """
+    try:
+        start_date = (datetime.now() - timedelta(days=days)).isoformat()
+
+        query = """
+            SELECT
+                c.name as city,
+                w.measurement_timestamp,
+                w.temperature,
+                w.humidity,
+                w.pressure,
+                w.wind_speed,
+                w.weather_description,
+                a.aqi,
+                a.pm2_5,
+                a.pm10,
+                a.no2,
+                CASE
+                    WHEN a.aqi > ? OR a.pm2_5 > ? THEN 1
+                    ELSE 0
+                END as is_high_pollution_event
+            FROM weather_measurements w
+            JOIN cities c ON w.city_id = c.city_id
+            JOIN air_pollution_measurements a ON w.city_id = a.city_id
+                AND datetime(w.measurement_timestamp) = datetime(a.measurement_timestamp)
+            WHERE w.measurement_timestamp >= ?
+                AND (a.aqi > ? OR a.pm2_5 > ?)
+            ORDER BY a.aqi DESC, a.pm2_5 DESC
+        """
+        params = [aqi_threshold, pm25_threshold, start_date, aqi_threshold, pm25_threshold]
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+
+            return [
+                {
+                    "city": row[0],
+                    "timestamp": row[1],
+                    "temperature": row[2],
+                    "humidity": row[3],
+                    "pressure": row[4],
+                    "wind_speed": row[5],
+                    "weather_description": row[6],
+                    "aqi": row[7],
+                    "pm2_5": row[8],
+                    "pm10": row[9],
+                    "no2": row[10],
+                    "is_high_pollution_event": row[11]
+                }
+                for row in results
+            ]
+
+    except sqlite3.Error as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+
+@app.get("/api/v1/analytics/prediction-data")
+async def get_prediction_data(
+    city: Optional[str] = None,
+    hours_back: Optional[int] = Query(default=168, ge=24, le=720)  # Default 7 days
+):
+    """
+    Get time series data for AQI prediction modeling
+    """
+    try:
+        start_date = (datetime.now() - timedelta(hours=hours_back)).isoformat()
+
+        query = """
+            SELECT
+                c.name as city,
+                w.measurement_timestamp,
+                w.temperature,
+                w.humidity,
+                w.pressure,
+                w.wind_speed,
+                a.aqi,
+                a.pm2_5,
+                a.no2,
+                LAG(a.aqi, 1) OVER (PARTITION BY c.name ORDER BY w.measurement_timestamp) as prev_aqi_1h,
+                LAG(a.aqi, 3) OVER (PARTITION BY c.name ORDER BY w.measurement_timestamp) as prev_aqi_3h,
+                LAG(a.aqi, 6) OVER (PARTITION BY c.name ORDER BY w.measurement_timestamp) as prev_aqi_6h,
+                LEAD(a.aqi, 12) OVER (PARTITION BY c.name ORDER BY w.measurement_timestamp) as future_aqi_12h,
+                LEAD(a.aqi, 24) OVER (PARTITION BY c.name ORDER BY w.measurement_timestamp) as future_aqi_24h
+            FROM weather_measurements w
+            JOIN cities c ON w.city_id = c.city_id
+            JOIN air_pollution_measurements a ON w.city_id = a.city_id
+                AND datetime(w.measurement_timestamp) = datetime(a.measurement_timestamp)
+            WHERE w.measurement_timestamp >= ?
+        """
+        params = [start_date]
+
+        if city:
+            query += " AND c.name = ?"
+            params.append(city)
+
+        query += " ORDER BY c.name, w.measurement_timestamp"
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+
+            return [
+                {
+                    "city": row[0],
+                    "timestamp": row[1],
+                    "temperature": row[2],
+                    "humidity": row[3],
+                    "pressure": row[4],
+                    "wind_speed": row[5],
+                    "aqi": row[6],
+                    "pm2_5": row[7],
+                    "no2": row[8],
+                    "prev_aqi_1h": row[9],
+                    "prev_aqi_3h": row[10],
+                    "prev_aqi_6h": row[11],
+                    "future_aqi_12h": row[12],
+                    "future_aqi_24h": row[13]
+                }
+                for row in results if row[12] is not None  # Only include rows where we have future data
+            ]
+
+    except sqlite3.Error as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+
 @app.post("/api/v1/collector/start")
 async def start_collector():
     """Start the data collection process"""
