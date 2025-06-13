@@ -460,6 +460,103 @@ async def set_collection_interval(interval: int = Query(..., gt=0)):
         return {"status": "success", "message": message}
     raise HTTPException(status_code=400, detail=message)
 
+@app.get("/api/v1/analytics/prediction-data-flexible")
+async def get_prediction_data_flexible(
+    city: Optional[str] = None,
+    hours_back: Optional[int] = Query(default=168, ge=24, le=720)
+):
+    """
+    Get time series data for AQI prediction modeling with flexible time windows
+    """
+    try:
+        start_date = (datetime.now() - timedelta(hours=hours_back)).isoformat()
+
+        query = """
+            WITH time_series AS (
+                SELECT
+                    c.name as city,
+                    w.measurement_timestamp,
+                    w.temperature,
+                    w.humidity,
+                    w.pressure,
+                    w.wind_speed,
+                    a.aqi,
+                    a.pm2_5,
+                    a.no2,
+                    ROW_NUMBER() OVER (PARTITION BY c.name ORDER BY w.measurement_timestamp) as row_num
+                FROM weather_measurements w
+                JOIN cities c ON w.city_id = c.city_id
+                JOIN air_pollution_measurements a ON w.city_id = a.city_id
+                    AND datetime(w.measurement_timestamp) = datetime(a.measurement_timestamp)
+                WHERE w.measurement_timestamp >= ?
+            )
+            SELECT
+                ts1.city,
+                ts1.measurement_timestamp,
+                ts1.temperature,
+                ts1.humidity,
+                ts1.pressure,
+                ts1.wind_speed,
+                ts1.aqi,
+                ts1.pm2_5,
+                ts1.no2,
+                -- Previous values (if available)
+                LAG(ts1.aqi, 1) OVER (PARTITION BY ts1.city ORDER BY ts1.measurement_timestamp) as prev_aqi_1,
+                LAG(ts1.aqi, 2) OVER (PARTITION BY ts1.city ORDER BY ts1.measurement_timestamp) as prev_aqi_2,
+                -- Future values using smaller windows that might actually exist
+                LEAD(ts1.aqi, 1) OVER (PARTITION BY ts1.city ORDER BY ts1.measurement_timestamp) as future_aqi_next,
+                LEAD(ts1.aqi, 2) OVER (PARTITION BY ts1.city ORDER BY ts1.measurement_timestamp) as future_aqi_2nd,
+                -- Try to find future values within reasonable time windows
+                (
+                    SELECT a2.aqi 
+                    FROM weather_measurements w2
+                    JOIN air_pollution_measurements a2 ON w2.city_id = a2.city_id
+                        AND datetime(w2.measurement_timestamp) = datetime(a2.measurement_timestamp)
+                    WHERE w2.city_id = (SELECT city_id FROM cities WHERE name = ts1.city)
+                        AND w2.measurement_timestamp > ts1.measurement_timestamp
+                        AND w2.measurement_timestamp <= datetime(ts1.measurement_timestamp, '+1 day')
+                    ORDER BY w2.measurement_timestamp
+                    LIMIT 1
+                ) as future_aqi_24h_approx
+            FROM time_series ts1
+        """
+        params = [start_date]
+
+        if city:
+            query += " WHERE ts1.city = ?"
+            params.append(city)
+
+        query += " ORDER BY ts1.city, ts1.measurement_timestamp"
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(query, params)
+            results = cursor.fetchall()
+
+            return [
+                {
+                    "city": row[0],
+                    "timestamp": row[1],
+                    "temperature": row[2],
+                    "humidity": row[3],
+                    "pressure": row[4],
+                    "wind_speed": row[5],
+                    "aqi": row[6],
+                    "pm2_5": row[7],
+                    "no2": row[8],
+                    "prev_aqi_1": row[9],
+                    "prev_aqi_2": row[10],
+                    "future_aqi_next": row[11],
+                    "future_aqi_2nd": row[12],
+                    "future_aqi_24h_approx": row[13]
+                }
+                for row in results
+            ]
+
+    except sqlite3.Error as e:
+        logger.error(f"Database error: {e}")
+        raise HTTPException(status_code=500, detail="Database error")
+
 @app.get("/")
 async def root():
     """
@@ -471,3 +568,4 @@ async def root():
         "documentation": "/docs",
         "health_check": "/health"
     }
+

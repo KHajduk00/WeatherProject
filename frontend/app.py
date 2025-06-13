@@ -132,10 +132,10 @@ class WeatherAPI:
             if city:
                 params['city'] = city
             
-            response = requests.get(f"{API_BASE_URL}/api/v1/analytics/prediction-data", params=params)
+            response = requests.get(f"{API_BASE_URL}/api/v1/analytics/prediction-data-flexible", params=params)
             return response.status_code == 200, response.json() if response.status_code == 200 else []
         except requests.exceptions.RequestException:
-            return False, []    
+            return False, []
 
 def main():
     st.title("🌤️ Weather Data Dashboard")
@@ -680,14 +680,50 @@ def show_smart_alerts_analysis():
 def show_aqi_prediction_analysis():
     """Analysis for AQI prediction modeling"""
     st.subheader("🔮 AQI Prediction Analysis")
-    st.info("**Research Question**: Can patterns in weather and pollution data be used to forecast AQI levels 12–24 hours ahead?")
+    st.info("**Research Question**: Can patterns in weather and pollution data be used to forecast AQI levels?")
+    
+    # Add data availability check
+    st.subheader("📊 Data Availability Check")
+    
+    # Check basic data availability
+    success_weather, weather_data = WeatherAPI.get_weather_data()
+    success_pollution, pollution_data = WeatherAPI.get_air_pollution_data()
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        weather_count = len(weather_data) if success_weather else 0
+        st.metric("Weather Records", weather_count)
+    with col2:
+        pollution_count = len(pollution_data) if success_pollution else 0
+        st.metric("Pollution Records", pollution_count)
+    with col3:
+        if weather_count > 0 and pollution_count > 0:
+            # Calculate data span
+            if weather_data:
+                timestamps = [datetime.fromisoformat(d['measurement_timestamp'].replace('Z', '+00:00')) if isinstance(d['measurement_timestamp'], str) else d['measurement_timestamp'] for d in weather_data]
+                data_span = (max(timestamps) - min(timestamps)).total_seconds() / 3600  # hours
+                st.metric("Data Span (hours)", f"{data_span:.1f}")
+            else:
+                st.metric("Data Span (hours)", "0")
+        else:
+            st.metric("Data Span (hours)", "0")
+    
+    # Show recommendation based on data availability
+    if weather_count == 0 or pollution_count == 0:
+        st.warning("⚠️ No weather or pollution data found. Please start the data collector and wait for data to be collected.")
+        st.info("💡 Go to the 'Data Collector' page to start data collection.")
+        return
+    elif weather_count < 24 or pollution_count < 24:
+        st.warning("⚠️ Insufficient data for prediction analysis. You need at least 24+ hours of continuous data.")
+        st.info(f"💡 Current data: {weather_count} weather records, {pollution_count} pollution records. Please wait for more data to be collected.")
+        return
     
     # Filters
     col1, col2 = st.columns(2)
     with col1:
         city_filter = st.text_input("City (optional)", key="pred_city")
     with col2:
-        hours_back = st.selectbox("Data History (hours)", [72, 168, 336, 720], index=1, key="pred_hours")  # 3 days to 30 days
+        hours_back = st.selectbox("Data History (hours)", [72, 168, 336, 720], index=1, key="pred_hours")
     
     # Fetch prediction data
     success, pred_data = WeatherAPI.get_prediction_data(
@@ -699,49 +735,42 @@ def show_aqi_prediction_analysis():
         df = pd.DataFrame(pred_data)
         df['timestamp'] = pd.to_datetime(df['timestamp'])
         
-        # Remove rows with missing future AQI data
-        df = df.dropna(subset=['future_aqi_12h', 'future_aqi_24h'])
-        
-        if len(df) > 0:
-            st.subheader(f"📊 Prediction Analysis ({len(df)} data points)")
+        # Filter for records that have some prediction data
+        df_with_predictions = df.dropna(subset=['future_aqi_next'])
+
+        if len(df_with_predictions) > 0:
+            st.subheader(f"📊 Prediction Analysis ({len(df_with_predictions)} usable data points)")
+
+            # Show data collection pattern info
+            st.info(f"""
+            **Data Collection Pattern Detected:**
+            - Total records: {len(df)}
+            - Records with next-step predictions: {len(df_with_predictions)}
+            - Records with 24h approximations: {len(df.dropna(subset=['future_aqi_24h_approx']))}
+
+            Note: Prediction accuracy depends on regular data collection intervals.
+            """)
             
-            # Feature importance analysis (correlation with future AQI)
+            # Feature correlation analysis
             features = ['temperature', 'humidity', 'pressure', 'wind_speed', 'aqi', 'pm2_5', 'no2']
-            targets = ['future_aqi_12h', 'future_aqi_24h']
             
+            st.subheader("🎯 Next-Step AQI Prediction Analysis")
+
             col1, col2 = st.columns(2)
             
             with col1:
-                st.write("**12-Hour AQI Prediction Correlations:**")
-                corr_12h = df[features + ['future_aqi_12h']].corr()['future_aqi_12h'].drop('future_aqi_12h').sort_values(key=abs, ascending=False)
-                st.dataframe(corr_12h.to_frame('Correlation'))
-            
+                st.write("**Correlations with Next AQI Value:**")
+                corr_next = df_with_predictions[features + ['future_aqi_next']].corr()['future_aqi_next'].drop('future_aqi_next').sort_values(key=abs, ascending=False)
+                st.dataframe(corr_next.to_frame('Correlation'))
+
             with col2:
-                st.write("**24-Hour AQI Prediction Correlations:**")
-                corr_24h = df[features + ['future_aqi_24h']].corr()['future_aqi_24h'].drop('future_aqi_24h').sort_values(key=abs, ascending=False)
-                st.dataframe(corr_24h.to_frame('Correlation'))
-            
-            # Prediction accuracy visualization
-            st.subheader("🎯 Prediction Accuracy Analysis")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                fig = px.scatter(df, x='aqi', y='future_aqi_12h', color='city',
-                               title="Current AQI vs 12-Hour Future AQI",
-                               labels={'aqi': 'Current AQI', 'future_aqi_12h': '12-Hour Future AQI'})
+                # Simple prediction accuracy
+                fig = px.scatter(df_with_predictions, x='aqi', y='future_aqi_next',
+                               color='city', title="Current AQI vs Next AQI Reading",
+                               labels={'aqi': 'Current AQI', 'future_aqi_next': 'Next AQI'})
                 # Add perfect prediction line
-                min_val = min(df['aqi'].min(), df['future_aqi_12h'].min())
-                max_val = max(df['aqi'].max(), df['future_aqi_12h'].max())
-                fig.add_shape(type="line", x0=min_val, y0=min_val, x1=max_val, y1=max_val,
-                             line=dict(color="red", dash="dash"))
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col2:
-                fig = px.scatter(df, x='aqi', y='future_aqi_24h', color='city',
-                               title="Current AQI vs 24-Hour Future AQI",
-                               labels={'aqi': 'Current AQI', 'future_aqi_24h': '24-Hour Future AQI'})
-                # Add perfect prediction line
+                min_val = min(df_with_predictions['aqi'].min(), df_with_predictions['future_aqi_next'].min())
+                max_val = max(df_with_predictions['aqi'].max(), df_with_predictions['future_aqi_next'].max())
                 fig.add_shape(type="line", x0=min_val, y0=min_val, x1=max_val, y1=max_val,
                              line=dict(color="red", dash="dash"))
                 st.plotly_chart(fig, use_container_width=True)
@@ -750,16 +779,22 @@ def show_aqi_prediction_analysis():
             st.subheader("📈 Time Series Prediction Patterns")
             
             # Select a subset for visualization
-            df_sample = df.head(100) if len(df) > 100 else df
-            
+            df_sample = df_with_predictions.head(100) if len(df_with_predictions) > 100 else df_with_predictions
+
             fig = go.Figure()
             fig.add_trace(go.Scatter(x=df_sample['timestamp'], y=df_sample['aqi'],
                                    mode='lines+markers', name='Current AQI'))
-            fig.add_trace(go.Scatter(x=df_sample['timestamp'], y=df_sample['future_aqi_12h'],
-                                   mode='lines+markers', name='12h Future AQI'))
-            fig.add_trace(go.Scatter(x=df_sample['timestamp'], y=df_sample['future_aqi_24h'],
-                                   mode='lines+markers', name='24h Future AQI'))
-            fig.update_layout(title="AQI Time Series - Current vs Future Values",
+            fig.add_trace(go.Scatter(x=df_sample['timestamp'], y=df_sample['future_aqi_next'],
+                                   mode='lines+markers', name='Next AQI Reading'))
+
+            # Add 24h approximation if available
+            if 'future_aqi_24h_approx' in df_sample.columns:
+                df_with_24h = df_sample.dropna(subset=['future_aqi_24h_approx'])
+                if len(df_with_24h) > 0:
+                    fig.add_trace(go.Scatter(x=df_with_24h['timestamp'], y=df_with_24h['future_aqi_24h_approx'],
+                                           mode='lines+markers', name='24h Approx AQI'))
+
+            fig.update_layout(title="AQI Time Series - Current vs Predicted Values",
                             xaxis_title="Time", yaxis_title="AQI")
             st.plotly_chart(fig, use_container_width=True)
             
@@ -767,21 +802,20 @@ def show_aqi_prediction_analysis():
             st.subheader("🌤️ Weather Influence on Prediction Accuracy")
             
             # Calculate prediction errors
-            df['error_12h'] = abs(df['future_aqi_12h'] - df['aqi'])
-            df['error_24h'] = abs(df['future_aqi_24h'] - df['aqi'])
-            
+            df_with_predictions['error_next'] = abs(df_with_predictions['future_aqi_next'] - df_with_predictions['aqi'])
+
             col1, col2 = st.columns(2)
             
             with col1:
-                fig = px.scatter(df, x='wind_speed', y='error_12h', color='humidity',
-                               title="12h Prediction Error vs Wind Speed",
-                               labels={'wind_speed': 'Wind Speed (m/s)', 'error_12h': '12h Prediction Error'})
+                fig = px.scatter(df_with_predictions, x='wind_speed', y='error_next', color='humidity',
+                               title="Next-Step Prediction Error vs Wind Speed",
+                               labels={'wind_speed': 'Wind Speed (m/s)', 'error_next': 'Next-Step Prediction Error'})
                 st.plotly_chart(fig, use_container_width=True)
             
             with col2:
-                fig = px.scatter(df, x='humidity', y='error_24h', color='temperature',
-                               title="24h Prediction Error vs Humidity",
-                               labels={'humidity': 'Humidity (%)', 'error_24h': '24h Prediction Error'})
+                fig = px.scatter(df_with_predictions, x='humidity', y='error_next', color='temperature',
+                               title="Next-Step Prediction Error vs Humidity",
+                               labels={'humidity': 'Humidity (%)', 'error_next': 'Next-Step Prediction Error'})
                 st.plotly_chart(fig, use_container_width=True)
             
             # Model performance metrics
@@ -790,34 +824,45 @@ def show_aqi_prediction_analysis():
             from sklearn.metrics import mean_absolute_error, mean_squared_error
             import numpy as np
             
-            mae_12h = mean_absolute_error(df['aqi'], df['future_aqi_12h'])
-            mae_24h = mean_absolute_error(df['aqi'], df['future_aqi_24h'])
-            rmse_12h = np.sqrt(mean_squared_error(df['aqi'], df['future_aqi_12h']))
-            rmse_24h = np.sqrt(mean_squared_error(df['aqi'], df['future_aqi_24h']))
-            
+            mae_next = mean_absolute_error(df_with_predictions['aqi'], df_with_predictions['future_aqi_next'])
+            rmse_next = np.sqrt(mean_squared_error(df_with_predictions['aqi'], df_with_predictions['future_aqi_next']))
+
             col1, col2, col3, col4 = st.columns(4)
             
             with col1:
-                st.metric("12h MAE", f"{mae_12h:.2f}")
+                st.metric("Next-Step MAE", f"{mae_next:.2f}")
             with col2:
-                st.metric("24h MAE", f"{mae_24h:.2f}")
-            with col3:
-                st.metric("12h RMSE", f"{rmse_12h:.2f}")
-            with col4:
-                st.metric("24h RMSE", f"{rmse_24h:.2f}")
-            
+                st.metric("Next-Step RMSE", f"{rmse_next:.2f}")
+
+            # Add 24h approximation metrics if available
+            if 'future_aqi_24h_approx' in df.columns:
+                df_with_24h = df.dropna(subset=['future_aqi_24h_approx'])
+                if len(df_with_24h) > 0:
+                    mae_24h = mean_absolute_error(df_with_24h['aqi'], df_with_24h['future_aqi_24h_approx'])
+                    rmse_24h = np.sqrt(mean_squared_error(df_with_24h['aqi'], df_with_24h['future_aqi_24h_approx']))
+
+                    with col3:
+                        st.metric("24h Approx MAE", f"{mae_24h:.2f}")
+                    with col4:
+                        st.metric("24h Approx RMSE", f"{rmse_24h:.2f}")
+
             # Prediction insights
             st.info(f"""
             **Key Insights for AQI Prediction:**
-            - 12-hour predictions show MAE of {mae_12h:.1f} AQI units
-            - 24-hour predictions show MAE of {mae_24h:.1f} AQI units
-            - Best predictive features: {corr_12h.head(3).index.tolist()}
+            - Next-step predictions show MAE of {mae_next:.1f} AQI units
+            - Best predictive features: {corr_next.head(3).index.tolist()}
             - Weather conditions significantly impact prediction accuracy
             - Consider using ensemble methods with weather pattern classification
+            - Prediction quality improves with regular, continuous data collection
             """)
             
         else:
-            st.warning("Insufficient data for prediction analysis. Need more historical data points.")
+            st.warning("No usable prediction data available. This usually means:")
+            st.markdown("""
+            - Data collection gaps are too large
+            - Need more continuous data collection
+            - Consider running the collector continuously for better prediction analysis
+            """)
     else:
         st.warning("No prediction data available for the selected criteria.")
 
