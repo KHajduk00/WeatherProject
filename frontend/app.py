@@ -685,26 +685,46 @@ def show_aqi_prediction_analysis():
     # Add data availability check
     st.subheader("📊 Data Availability Check")
     
-    # Check basic data availability
-    success_weather, weather_data = WeatherAPI.get_weather_data()
-    success_pollution, pollution_data = WeatherAPI.get_air_pollution_data()
+    # Check basic data availability with recent date range
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=7)  # Check last 7 days
+    
+    success_weather, weather_data = WeatherAPI.get_weather_data(
+        start_date=start_date, 
+        end_date=end_date
+    )
+    success_pollution, pollution_data = WeatherAPI.get_air_pollution_data(
+        start_date=start_date, 
+        end_date=end_date
+    )
     
     col1, col2, col3 = st.columns(3)
     with col1:
-        weather_count = len(weather_data) if success_weather else 0
+        weather_count = len(weather_data) if success_weather and weather_data else 0
         st.metric("Weather Records", weather_count)
     with col2:
-        pollution_count = len(pollution_data) if success_pollution else 0
+        pollution_count = len(pollution_data) if success_pollution and pollution_data else 0
         st.metric("Pollution Records", pollution_count)
     with col3:
         if weather_count > 0 and pollution_count > 0:
-            # Calculate data span
-            if weather_data:
-                timestamps = [datetime.fromisoformat(d['measurement_timestamp'].replace('Z', '+00:00')) if isinstance(d['measurement_timestamp'], str) else d['measurement_timestamp'] for d in weather_data]
-                data_span = (max(timestamps) - min(timestamps)).total_seconds() / 3600  # hours
-                st.metric("Data Span (hours)", f"{data_span:.1f}")
-            else:
-                st.metric("Data Span (hours)", "0")
+            # Calculate data span using weather data timestamps
+            try:
+                timestamps = []
+                for d in weather_data:
+                    if isinstance(d['measurement_timestamp'], str):
+                        # Handle string timestamps
+                        timestamp_str = d['measurement_timestamp'].replace('Z', '+00:00')
+                        timestamps.append(datetime.fromisoformat(timestamp_str))
+                    else:
+                        timestamps.append(d['measurement_timestamp'])
+                
+                if timestamps:
+                    data_span = (max(timestamps) - min(timestamps)).total_seconds() / 3600  # hours
+                    st.metric("Data Span (hours)", f"{data_span:.1f}")
+                else:
+                    st.metric("Data Span (hours)", "0")
+            except Exception as e:
+                st.metric("Data Span (hours)", "Error calculating")
         else:
             st.metric("Data Span (hours)", "0")
     
